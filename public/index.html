@@ -1,37 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soundcloud WAV — Audio Downloader</title>
-  <meta name="description" content="Download YouTube and SoundCloud audio as high-quality WAV files. Dark, minimal, fast." />
+  <title>Soundcloud WAV</title>
+  <meta name="description"
+    content="Download YouTube and SoundCloud audio as high-quality WAV files. Dark, minimal, fast." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&display=swap" rel="stylesheet" />
   <style>
     /* ── Reset & base ─────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:          #090909;
-      --surface:     rgba(255,255,255,0.04);
-      --surface-h:   rgba(255,255,255,0.07);
-      --border:      rgba(255,255,255,0.10);
-      --border-h:    rgba(255,255,255,0.22);
-      --text:        #f0f0f0;
-      --text-muted:  rgba(255,255,255,0.38);
-      --text-sub:    rgba(255,255,255,0.55);
-      --accent:      #a78bfa;      /* soft violet */
-      --accent-2:    #c4b5fd;
-      --error:       #f87171;
-      --success:     #34d399;
-      --radius:      18px;
-      --radius-sm:   10px;
-      --blur:        20px;
-      --trans:       0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    html, body {
+    :root {
+      --bg: #090909;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-h: rgba(255, 255, 255, 0.07);
+      --border: rgba(255, 255, 255, 0.10);
+      --border-h: rgba(255, 255, 255, 0.22);
+      --text: #f0f0f0;
+      --text-muted: rgba(255, 255, 255, 0.38);
+      --text-sub: rgba(255, 255, 255, 0.55);
+      --accent: #a78bfa;
+      /* soft violet */
+      --accent-2: #c4b5fd;
+      --error: #f87171;
+      --success: #34d399;
+      --radius: 18px;
+      --radius-sm: 10px;
+      --blur: 20px;
+      --trans: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html,
+    body {
       height: 100%;
       background: var(--bg);
       color: var(--text);
@@ -46,8 +56,8 @@
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(ellipse 60% 50% at 50% -10%, rgba(139,92,246,0.18) 0%, transparent 65%),
-        radial-gradient(ellipse 40% 30% at 80% 110%, rgba(99,102,241,0.10) 0%, transparent 60%);
+        radial-gradient(ellipse 60% 50% at 50% -10%, rgba(139, 92, 246, 0.18) 0%, transparent 65%),
+        radial-gradient(ellipse 40% 30% at 80% 110%, rgba(99, 102, 241, 0.10) 0%, transparent 60%);
       pointer-events: none;
       z-index: 0;
     }
@@ -76,8 +86,15 @@
     }
 
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(28px); }
-      to   { opacity: 1; transform: translateY(0);    }
+      from {
+        opacity: 0;
+        transform: translateY(28px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     /* ── Header ───────────────────────────────────────────── */
@@ -121,8 +138,17 @@
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 0.4; transform: scale(1); }
-      50%       { opacity: 1;   transform: scale(1.3); }
+
+      0%,
+      100% {
+        opacity: 0.4;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.3);
+      }
     }
 
     /* ── Glass panel ──────────────────────────────────────── */
@@ -147,7 +173,7 @@
 
     #url-input {
       flex: 1;
-      background: rgba(255,255,255,0.04);
+      background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text);
@@ -159,12 +185,14 @@
       transition: border-color var(--trans), background var(--trans), box-shadow var(--trans);
     }
 
-    #url-input::placeholder { color: var(--text-muted); }
+    #url-input::placeholder {
+      color: var(--text-muted);
+    }
 
     #url-input:focus {
-      border-color: rgba(167,139,250,0.5);
-      background: rgba(255,255,255,0.06);
-      box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+      border-color: rgba(167, 139, 250, 0.5);
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
     }
 
     /* ── Download button ──────────────────────────────────── */
@@ -172,8 +200,8 @@
       display: flex;
       align-items: center;
       gap: 7px;
-      background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: var(--radius-sm);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
@@ -189,9 +217,9 @@
     }
 
     #download-btn:hover:not(:disabled) {
-      background: rgba(130,100,240,0.18);
-      border-color: rgba(167,139,250,0.45);
-      box-shadow: 0 0 22px rgba(139,92,246,0.22), 0 0 0 1px rgba(167,139,250,0.15) inset;
+      background: rgba(130, 100, 240, 0.18);
+      border-color: rgba(167, 139, 250, 0.45);
+      box-shadow: 0 0 22px rgba(139, 92, 246, 0.22), 0 0 0 1px rgba(167, 139, 250, 0.15) inset;
     }
 
     #download-btn:active:not(:disabled) {
@@ -213,14 +241,16 @@
       display: none;
       font-size: 13px;
       color: var(--error);
-      background: rgba(248,113,113,0.07);
-      border: 1px solid rgba(248,113,113,0.18);
+      background: rgba(248, 113, 113, 0.07);
+      border: 1px solid rgba(248, 113, 113, 0.18);
       border-radius: var(--radius-sm);
       padding: 10px 14px;
       line-height: 1.5;
     }
 
-    #error-msg.visible { display: block; }
+    #error-msg.visible {
+      display: block;
+    }
 
     /* ── Progress section ─────────────────────────────────── */
     #progress-section {
@@ -229,7 +259,9 @@
       gap: 18px;
     }
 
-    #progress-section.visible { display: flex; }
+    #progress-section.visible {
+      display: flex;
+    }
 
     .progress-header {
       display: flex;
@@ -254,7 +286,7 @@
     /* Overall bar */
     .progress-track {
       height: 3px;
-      background: rgba(255,255,255,0.07);
+      background: rgba(255, 255, 255, 0.07);
       border-radius: 99px;
       overflow: hidden;
     }
@@ -273,13 +305,18 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
+      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
       animation: shimmer 1.8s infinite;
     }
 
     @keyframes shimmer {
-      from { transform: translateX(-100%); }
-      to   { transform: translateX(250%);  }
+      from {
+        transform: translateX(-100%);
+      }
+
+      to {
+        transform: translateX(250%);
+      }
     }
 
     /* Status text */
@@ -301,8 +338,8 @@
       display: flex;
       flex-direction: column;
       gap: 7px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       border-radius: var(--radius-sm);
       padding: 12px 14px;
       animation: fadeUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -335,15 +372,34 @@
       flex-shrink: 0;
     }
 
-    .track-badge.downloading { background: rgba(99,102,241,0.18); color: #a5b4fc; }
-    .track-badge.converting  { background: rgba(245,158,11,0.15); color: #fbbf24; }
-    .track-badge.done        { background: rgba(52,211,153,0.12); color: var(--success); }
-    .track-badge.error       { background: rgba(248,113,113,0.12); color: var(--error); }
-    .track-badge.pending     { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+    .track-badge.downloading {
+      background: rgba(99, 102, 241, 0.18);
+      color: #a5b4fc;
+    }
+
+    .track-badge.converting {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+    }
+
+    .track-badge.done {
+      background: rgba(52, 211, 153, 0.12);
+      color: var(--success);
+    }
+
+    .track-badge.error {
+      background: rgba(248, 113, 113, 0.12);
+      color: var(--error);
+    }
+
+    .track-badge.pending {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+    }
 
     .track-bar-track {
       height: 2px;
-      background: rgba(255,255,255,0.06);
+      background: rgba(255, 255, 255, 0.06);
       border-radius: 99px;
       overflow: hidden;
     }
@@ -355,9 +411,17 @@
       transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .track-bar-fill.downloading { background: linear-gradient(90deg, #6366f1, #a78bfa); }
-    .track-bar-fill.converting  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-    .track-bar-fill.done        { background: linear-gradient(90deg, #10b981, #34d399); }
+    .track-bar-fill.downloading {
+      background: linear-gradient(90deg, #6366f1, #a78bfa);
+    }
+
+    .track-bar-fill.converting {
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    }
+
+    .track-bar-fill.done {
+      background: linear-gradient(90deg, #10b981, #34d399);
+    }
 
     .track-error-msg {
       font-size: 11.5px;
@@ -365,52 +429,89 @@
       opacity: 0.8;
     }
 
-    /* ── Download links ───────────────────────────────────── */
-    #download-links {
-      display: flex;
+    /* ── ZIP download button ──────────────────────────────────── */
+    #zip-section {
+      display: none;
       flex-direction: column;
-      gap: 8px;
+      align-items: center;
+      gap: 12px;
     }
 
-    .dl-link {
+    #zip-section.visible {
+      display: flex;
+    }
+
+    #zip-btn {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      background: rgba(52,211,153,0.05);
-      border: 1px solid rgba(52,211,153,0.15);
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, rgba(52, 211, 153, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%);
+      border: 1px solid rgba(52, 211, 153, 0.30);
       border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      color: var(--text);
+      color: var(--success);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      cursor: pointer;
       text-decoration: none;
+      transition: background var(--trans), border-color var(--trans), box-shadow var(--trans), transform 0.15s;
+      animation: fadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    #zip-btn:hover {
+      background: linear-gradient(135deg, rgba(52, 211, 153, 0.20) 0%, rgba(16, 185, 129, 0.14) 100%);
+      border-color: rgba(52, 211, 153, 0.50);
+      box-shadow: 0 0 24px rgba(52, 211, 153, 0.18), 0 0 0 1px rgba(52, 211, 153, 0.12) inset;
+      transform: translateY(-1px);
+    }
+
+    #zip-btn:active {
+      transform: scale(0.98);
+    }
+
+    .zip-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .zip-info {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-weight: 300;
+    }
+
+    /* Zipping spinner state */
+    #zipping-msg {
+      display: none;
+      align-items: center;
+      gap: 10px;
       font-size: 13px;
       font-weight: 300;
-      transition: background var(--trans), border-color var(--trans);
-      animation: fadeUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+      color: var(--text-sub);
     }
 
-    .dl-link:hover {
-      background: rgba(52,211,153,0.09);
-      border-color: rgba(52,211,153,0.28);
-    }
-
-    .dl-link-name {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 1;
-    }
-
-    .dl-link-btn {
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--success);
-      flex-shrink: 0;
+    #zipping-msg.visible {
       display: flex;
-      align-items: center;
-      gap: 4px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(167, 139, 250, 0.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     /* ── Footer ───────────────────────────────────────────── */
@@ -424,12 +525,22 @@
 
     /* ── Responsive ───────────────────────────────────────── */
     @media (max-width: 480px) {
-      .panel { padding: 20px 16px; }
-      .input-row { flex-direction: column; }
-      #download-btn { padding: 13px; justify-content: center; }
+      .panel {
+        padding: 20px 16px;
+      }
+
+      .input-row {
+        flex-direction: column;
+      }
+
+      #download-btn {
+        padding: 13px;
+        justify-content: center;
+      }
     }
   </style>
 </head>
+
 <body>
   <main>
     <div class="card">
@@ -443,14 +554,8 @@
       <!-- Input panel -->
       <div class="panel">
         <div class="input-row">
-          <input
-            type="text"
-            id="url-input"
-            placeholder="Paste YouTube or SoundCloud URL…"
-            autocomplete="off"
-            spellcheck="false"
-            aria-label="YouTube or SoundCloud URL"
-          />
+          <input type="text" id="url-input" placeholder="Paste YouTube or SoundCloud URL…" autocomplete="off"
+            spellcheck="false" aria-label="YouTube or SoundCloud URL" />
           <button id="download-btn" type="button" aria-label="Download">
             <span class="btn-icon">↓</span>
             Download
@@ -474,7 +579,21 @@
 
           <p id="status-text"></p>
           <div id="track-list"></div>
-          <div id="download-links"></div>
+
+          <!-- Zipping indicator -->
+          <div id="zipping-msg">
+            <div class="spinner"></div>
+            <span>Compressing tracks into ZIP…</span>
+          </div>
+
+          <!-- ZIP download -->
+          <div id="zip-section">
+            <a id="zip-btn" href="#" download>
+              <span class="zip-icon">📦</span>
+              <span>Download ZIP</span>
+            </a>
+            <span class="zip-info" id="zip-info"></span>
+          </div>
         </div>
       </div>
 
@@ -488,15 +607,18 @@
 
   <script>
     /* ── DOM refs ─────────────────────────────────────────── */
-    const urlInput       = document.getElementById('url-input');
-    const downloadBtn    = document.getElementById('download-btn');
-    const errorMsg       = document.getElementById('error-msg');
-    const progressSec    = document.getElementById('progress-section');
-    const overallBar     = document.getElementById('overall-bar');
-    const overallPct     = document.getElementById('overall-pct');
-    const statusText     = document.getElementById('status-text');
-    const trackList      = document.getElementById('track-list');
-    const downloadLinks  = document.getElementById('download-links');
+    const urlInput = document.getElementById('url-input');
+    const downloadBtn = document.getElementById('download-btn');
+    const errorMsg = document.getElementById('error-msg');
+    const progressSec = document.getElementById('progress-section');
+    const overallBar = document.getElementById('overall-bar');
+    const overallPct = document.getElementById('overall-pct');
+    const statusText = document.getElementById('status-text');
+    const trackList = document.getElementById('track-list');
+    const zipSection = document.getElementById('zip-section');
+    const zipBtn = document.getElementById('zip-btn');
+    const zipInfo = document.getElementById('zip-info');
+    const zippingMsg = document.getElementById('zipping-msg');
 
     /* ── State ────────────────────────────────────────────── */
     let currentEs = null;   // EventSource
@@ -529,7 +651,10 @@
     function reset() {
       hideError();
       trackList.innerHTML = '';
-      downloadLinks.innerHTML = '';
+      zipSection.classList.remove('visible');
+      zippingMsg.classList.remove('visible');
+      zipBtn.href = '#';
+      zipInfo.textContent = '';
       trackCount = 0;
       tracksCompleted = 0;
       Object.keys(trackEls).forEach(k => delete trackEls[k]);
@@ -567,7 +692,7 @@
       item.append(header, barTrack);
       trackList.appendChild(item);
 
-      trackEls[index] = { el: item, bar: barFill, badge, barTrack };
+      trackEls[index] = { el: item, bar: barFill, badge, barTrack, titleEl };
       return trackEls[index];
     }
 
@@ -576,6 +701,12 @@
       if (!t) return;
       t.badge.className = `track-badge ${state}`;
       t.badge.textContent = text;
+    }
+
+    function setTrackTitle(index, title) {
+      const t = trackEls[index];
+      if (!t || !title) return;
+      t.titleEl.textContent = title;
     }
 
     function setTrackBar(index, pct, cls) {
@@ -644,6 +775,12 @@
           trackCount = ev.total;
           break;
 
+        case 'track_title': {
+          setTrackTitle(ev.index, ev.title);
+          setStatus(`Downloading track ${ev.index + 1} of ${trackCount}: ${ev.title}`);
+          break;
+        }
+
         case 'track_start': {
           setStatus(`Downloading track ${ev.index + 1} of ${ev.total}: ${ev.title}`);
           createTrackEl(ev.index, ev.title);
@@ -670,9 +807,6 @@
           tracksCompleted++;
           trackProgress[ev.index] = 100;
           recalcOverall();
-
-          // Add download link and auto-trigger download
-          addDownloadLink(jobId, ev.filename, ev.title);
           break;
         }
 
@@ -690,13 +824,40 @@
           break;
         }
 
+        case 'zipping': {
+          setStatus('Compressing tracks into ZIP…');
+          zippingMsg.classList.add('visible');
+          break;
+        }
+
         case 'done': {
-          setStatus(ev.files.length > 0
-            ? `✓ All ${ev.files.length} track${ev.files.length !== 1 ? 's' : ''} ready.`
-            : '⚠ No tracks could be downloaded.');
+          zippingMsg.classList.remove('visible');
           setOverall(100);
           downloadBtn.disabled = false;
           if (currentEs) { currentEs.close(); currentEs = null; }
+
+          if (ev.zipReady) {
+            const trackWord = ev.files.length !== 1 ? 'tracks' : 'track';
+            setStatus(`✓ ${ev.files.length} ${trackWord} compressed and ready.`);
+            zipBtn.href = `/api/zip/${jobId}`;
+            zipBtn.download = `playlist_${jobId.slice(0, 8)}.zip`;
+            zipInfo.textContent = `${ev.files.length} WAV file${ev.files.length !== 1 ? 's' : ''} inside`;
+            zipSection.classList.add('visible');
+            // Auto-trigger download
+            setTimeout(() => {
+              const a = document.createElement('a');
+              a.href = zipBtn.href;
+              a.download = zipBtn.download;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }, 400);
+          } else if (ev.files && ev.files.length > 0) {
+            setStatus(`✓ ${ev.files.length} track${ev.files.length !== 1 ? 's' : ''} downloaded. ZIP creation failed.`);
+            if (ev.zipError) showError(`ZIP error: ${ev.zipError}`);
+          } else {
+            setStatus('⚠ No tracks could be downloaded.');
+          }
           break;
         }
 
@@ -719,44 +880,6 @@
       setOverall(pct);
     }
 
-    /* ── Add download link & auto-trigger ────────────────── */
-    const autoTriggered = new Set();
-
-    function addDownloadLink(jobId, filename, title) {
-      const href = `/api/file/${jobId}/${encodeURIComponent(filename)}`;
-
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = filename;
-      link.className = 'dl-link';
-      link.setAttribute('aria-label', `Download ${title}`);
-
-      const name = document.createElement('span');
-      name.className = 'dl-link-name';
-      name.textContent = title;
-
-      const btn = document.createElement('span');
-      btn.className = 'dl-link-btn';
-      btn.innerHTML = '↓ WAV';
-
-      link.append(name, btn);
-      downloadLinks.appendChild(link);
-
-      // Auto-trigger browser download (only once per file)
-      if (!autoTriggered.has(filename)) {
-        autoTriggered.add(filename);
-        // Small delay so the file is ready
-        setTimeout(() => {
-          const a = document.createElement('a');
-          a.href = href;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }, 600);
-      }
-    }
-
     /* ── Event listeners ─────────────────────────────────── */
     downloadBtn.addEventListener('click', handleSubmit);
 
@@ -767,4 +890,5 @@
     urlInput.addEventListener('input', hideError);
   </script>
 </body>
+
 </html>
