@@ -2,6 +2,7 @@
  * Soundcloud WAV – Express backend
  * Downloads YouTube / SoundCloud audio via yt-dlp and converts to WAV with ffmpeg.
  * Progress is streamed to the client via Server-Sent Events (SSE).
+ * On completion, all WAVs are compressed into a single ZIP for download.
  */
 
 const express = require('express');
@@ -14,10 +15,10 @@ const { v4: uuidv4 } = require('uuid');
 // ---------------------------------------------------------------------------
 // Configuration  — override with environment variables
 // ---------------------------------------------------------------------------
-const PORT       = process.env.PORT       || 3000;
-const YTDLP_PATH = process.env.YTDLP_PATH || 'yt-dlp';   // must be on PATH or absolute path
-const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';  // must be on PATH or absolute path
-const TMP_DIR    = process.env.TMP_DIR    || path.join(os.tmpdir(), 'soundcloud-wav');
+const PORT        = process.env.PORT        || 3000;
+const YTDLP_PATH  = process.env.YTDLP_PATH  || 'yt-dlp';
+const FFMPEG_PATH = process.env.FFMPEG_PATH  || 'ffmpeg';
+const TMP_DIR     = process.env.TMP_DIR     || path.join(os.tmpdir(), 'soundcloud-wav');
 
 // Ensure temp directory exists
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
@@ -27,7 +28,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------------------------
-// In-memory job store  { jobId -> { status, files: [], error } }
+// In-memory job store  { jobId -> { status, files: [], error, zipPath } }
 // ---------------------------------------------------------------------------
 const jobs = {};
 
@@ -40,8 +41,10 @@ app.post('/api/download', (req, res) => {
     return res.status(400).json({ error: 'URL is required.' });
   }
 
-  // Basic sanity check
-  const validHosts = ['youtube.com', 'youtu.be', 'soundcloud.com', 'www.youtube.com', 'www.soundcloud.com', 'm.youtube.com', 'music.youtube.com'];
+  const validHosts = [
+    'youtube.com', 'youtu.be', 'soundcloud.com',
+    'www.youtube.com', 'www.soundcloud.com', 'm.youtube.com', 'music.youtube.com'
+  ];
   let parsedUrl;
   try {
     parsedUrl = new URL(url.trim());
@@ -53,11 +56,10 @@ app.post('/api/download', (req, res) => {
   }
 
   const jobId = uuidv4();
-  jobs[jobId] = { status: 'pending', files: [], error: null };
+  jobs[jobId] = { status: 'pending', files: [], error: null, zipPath: null };
 
   res.json({ jobId });
 
-  // Run async — don't await
   runDownloadJob(jobId, url.trim()).catch(err => {
     if (jobs[jobId]) {
       jobs[jobId].status = 'error';
@@ -85,17 +87,14 @@ app.get('/api/progress/:jobId', (req, res) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  // Poll job state and forward events
   const job = jobs[jobId];
   if (!job._listeners) job._listeners = [];
   job._listeners.push(send);
 
-  // Replay buffered events so far
   if (job._events) {
     for (const ev of job._events) send(ev);
   }
 
-  // If already done/error, close immediately
   if (job.status === 'done' || job.status === 'error') {
     send({ type: job.status === 'done' ? 'done' : 'error', error: job.error, files: job.files });
     res.end();
@@ -110,36 +109,33 @@ app.get('/api/progress/:jobId', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/file/:jobId/:filename  — serve a converted WAV file then delete it
+// GET /api/zip/:jobId  — serve the ZIP then clean up
 // ---------------------------------------------------------------------------
-app.get('/api/file/:jobId/:filename', (req, res) => {
-  const { jobId, filename } = req.params;
+app.get('/api/zip/:jobId', (req, res) => {
+  const { jobId } = req.params;
   const job = jobs[jobId];
   if (!job) return res.status(404).send('Job not found.');
-
-  // Security: only allow filenames that are part of this job
-  const safeFilename = path.basename(filename);
-  const filePath = path.join(TMP_DIR, jobId, safeFilename);
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('File not found or already downloaded.');
+  if (!job.zipPath || !fs.existsSync(job.zipPath)) {
+    return res.status(404).send('ZIP file not found or already downloaded.');
   }
 
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
-  res.setHeader('Content-Type', 'audio/wav');
+  const zipName = path.basename(job.zipPath);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(zipName)}"`);
+  res.setHeader('Content-Type', 'application/zip');
 
-  const stream = fs.createReadStream(filePath);
+  const stream = fs.createReadStream(job.zipPath);
   stream.pipe(res);
   stream.on('end', () => {
-    // Delete the file after delivery
-    try { fs.unlinkSync(filePath); } catch {}
-    // If all files are delivered, clean up the job directory
-    const remaining = fs.readdirSync(path.join(TMP_DIR, jobId)).filter(f => f.endsWith('.wav'));
-    if (remaining.length === 0) {
-      try { fs.rmdirSync(path.join(TMP_DIR, jobId), { recursive: true }); } catch {}
-      // Keep job metadata for a little while for debugging, clean up after 5 min
-      setTimeout(() => { delete jobs[jobId]; }, 5 * 60 * 1000);
-    }
+    // Delete the ZIP file and the job directory after delivery
+    try { fs.rmSync(job.zipPath, { force: true }); } catch {}
+    const jobDir = path.join(TMP_DIR, jobId);
+    try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch {}
+    job.zipPath = null; // mark as consumed
+    setTimeout(() => { delete jobs[jobId]; }, 5 * 60 * 1000);
+  });
+  stream.on('error', (err) => {
+    console.error('Stream error:', err);
+    res.status(500).end();
   });
 });
 
@@ -164,7 +160,7 @@ async function runDownloadJob(jobId, url) {
   fs.mkdirSync(jobDir, { recursive: true });
 
   // ------------------------------------------------------------------
-  // Step 1: Get track list via yt-dlp --flat-playlist --dump-json
+  // Step 1: Get track list
   // ------------------------------------------------------------------
   emit({ type: 'status', message: 'Fetching track list…' });
 
@@ -202,20 +198,98 @@ async function runDownloadJob(jobId, url) {
       emit({ type: 'track_done', index: i, filename: path.basename(wavFile), title: trackTitle, total });
     } catch (err) {
       emit({ type: 'track_error', index: i, title: trackTitle, error: err.message });
-      // Continue with remaining tracks
     }
   }
 
-  job.status = 'done';
-  emit({ type: 'done', files: completedFiles });
-
-  // Close all SSE connections
-  if (job._listeners) {
-    for (const send of job._listeners) {
-      try { /* connection will naturally time out */ } catch {}
-    }
+  if (completedFiles.length === 0) {
+    job.status = 'done';
+    emit({ type: 'done', files: [], zipReady: false });
+    return;
   }
+
+  // ------------------------------------------------------------------
+  // Step 3: Compress all WAVs into a ZIP
+  // ------------------------------------------------------------------
+  emit({ type: 'status', message: 'Compressing files into ZIP…' });
+  emit({ type: 'zipping' });
+
+  try {
+    const zipPath = await createZip(jobDir, jobId);
+    job.zipPath = zipPath;
+    job.status = 'done';
+    emit({ type: 'done', files: completedFiles, zipReady: true });
+  } catch (err) {
+    job.status = 'done';
+    emit({ type: 'done', files: completedFiles, zipReady: false, zipError: err.message });
+  }
+
+  // Safety cleanup: if the user never downloads the ZIP, delete everything after 1 hour
+  setTimeout(() => {
+    if (jobs[jobId]) {
+      const jobDir = path.join(TMP_DIR, jobId);
+      try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch {}
+      if (jobs[jobId].zipPath) {
+        try { fs.rmSync(jobs[jobId].zipPath, { force: true }); } catch {}
+      }
+      delete jobs[jobId];
+    }
+  }, 60 * 60 * 1000); // 1 hour
 }
+
+// ---------------------------------------------------------------------------
+// Create ZIP of all WAVs in jobDir using Python3 (cross-platform, no deps)
+// ---------------------------------------------------------------------------
+function createZip(jobDir, jobId) {
+  return new Promise((resolve, reject) => {
+    const zipPath = path.join(TMP_DIR, `${jobId}.zip`);
+
+    // Gather all wav files (full paths)
+    let wavFiles;
+    try {
+      wavFiles = fs.readdirSync(jobDir)
+        .filter(f => f.endsWith('.wav'))
+        .map(f => path.join(jobDir, f));
+    } catch (err) {
+      return reject(new Error(`Cannot read job directory: ${err.message}`));
+    }
+
+    if (wavFiles.length === 0) {
+      return reject(new Error('No WAV files found to compress.'));
+    }
+
+    // Python one-liner: create a ZIP with all wav files (arcname = basename only)
+    const pyScript = [
+      'import zipfile, sys, os',
+      'zip_path = sys.argv[1]',
+      'files = sys.argv[2:]',
+      'z = zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED)',
+      '[z.write(f, os.path.basename(f)) for f in files]',
+      'z.close()'
+    ].join('; ');
+
+    const args = ['-c', pyScript, zipPath, ...wavFiles];
+    const proc = spawn('python3', args);
+
+    let stderr = '';
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.stdout.on('data', () => {});
+
+    proc.on('error', err => {
+      reject(new Error(`python3 not found: ${err.message}`));
+    });
+
+    proc.on('close', code => {
+      if (code !== 0) {
+        return reject(new Error(`Python ZIP failed (exit ${code}): ${stderr.slice(0, 300)}`));
+      }
+      if (!fs.existsSync(zipPath)) {
+        return reject(new Error('ZIP file was not created.'));
+      }
+      resolve(zipPath);
+    });
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Fetch flat track list
@@ -246,7 +320,6 @@ function getTrackList(url) {
         return reject(new Error(stderr || 'No tracks found for the given URL.'));
       }
 
-      // yt-dlp dumps one JSON object per line
       const lines = stdout.trim().split('\n').filter(Boolean);
       const tracks = [];
       for (const line of lines) {
@@ -267,20 +340,24 @@ function getTrackList(url) {
 
 // ---------------------------------------------------------------------------
 // Download a single track and convert to WAV via ffmpeg
+// Uses an isolated subdirectory + %(title)s template so the real platform
+// title is always used for the filename, regardless of flat-playlist data.
 // ---------------------------------------------------------------------------
-function downloadAndConvert(url, safeTitle, jobDir, jobId, index, total, emit) {
+function downloadAndConvert(url, hintTitle, jobDir, jobId, index, total, emit) {
   return new Promise((resolve, reject) => {
-    const outputTemplate = path.join(jobDir, `${safeTitle}.%(ext)s`);
-    const wavPath = path.join(jobDir, `${safeTitle}.wav`);
+    // Isolated subdirectory for this track to avoid filename collisions
+    const trackDir = path.join(jobDir, `t${index}`);
+    fs.mkdirSync(trackDir, { recursive: true });
 
-    // Use yt-dlp to download best audio, pipe to ffmpeg for WAV conversion
+    const outputTemplate = path.join(trackDir, '%(title)s.%(ext)s');
+
     const ytdlpArgs = [
       '--no-playlist',
       '--no-warnings',
       '--ignore-errors',
       '-f', 'bestaudio',
       '--output', outputTemplate,
-      '--newline',        // force progress on new lines
+      '--newline',
       '--progress',
       url
     ];
@@ -290,7 +367,14 @@ function downloadAndConvert(url, safeTitle, jobDir, jobId, index, total, emit) {
 
     proc.stdout.on('data', (data) => {
       const text = data.toString();
-      // Parse yt-dlp download percentage lines like "[download]  42.3% ..."
+      // Real title from yt-dlp destination line
+      const destMatch = text.match(/\[download\] Destination: (.+)/);
+      if (destMatch) {
+        const basename = path.basename(destMatch[1].trim());
+        const realTitle = path.basename(basename, path.extname(basename));
+        emit({ type: 'track_title', index, title: realTitle });
+      }
+      // Download progress
       const match = text.match(/\[download\]\s+([\d.]+)%/);
       if (match) {
         const pct = parseFloat(match[1]);
@@ -304,32 +388,29 @@ function downloadAndConvert(url, safeTitle, jobDir, jobId, index, total, emit) {
       reject(new Error(`yt-dlp error: ${err.message}`));
     });
 
-    proc.on('close', (code) => {
-      if (code !== 0 && code !== null) {
-        // Some formats exit with non-zero even on success — check if file exists
-      }
-
-      // Find the downloaded file (may have any audio extension)
+    proc.on('close', () => {
+      // Find the downloaded audio file in the isolated subdirectory
       let downloadedFile;
       try {
-        const files = fs.readdirSync(jobDir);
-        // Find the most recently created file matching the title
-        const candidates = files
-          .filter(f => f.startsWith(safeTitle) && !f.endsWith('.wav') && !f.endsWith('.part'))
-          .map(f => ({ name: f, mtime: fs.statSync(path.join(jobDir, f)).mtimeMs }))
+        const files = fs.readdirSync(trackDir)
+          .filter(f => !f.endsWith('.part') && !f.endsWith('.ytdl'))
+          .map(f => ({ name: f, mtime: fs.statSync(path.join(trackDir, f)).mtimeMs }))
           .sort((a, b) => b.mtime - a.mtime);
-        if (candidates.length > 0) downloadedFile = path.join(jobDir, candidates[0].name);
+        if (files.length > 0) downloadedFile = path.join(trackDir, files[0].name);
       } catch {}
 
-      // If we couldn't find a non-wav, check if yt-dlp already created a wav
       if (!downloadedFile) {
-        if (fs.existsSync(wavPath)) {
-          return resolve(wavPath);
-        }
-        return reject(new Error(`Download failed for "${safeTitle}". ${stderr.slice(0, 200)}`));
+        // Clean up empty trackDir
+        try { fs.rmSync(trackDir, { recursive: true, force: true }); } catch {}
+        return reject(new Error(`Download failed for "${hintTitle}". ${stderr.slice(0, 200)}`));
       }
 
-      // Convert to WAV using ffmpeg
+      // Derive clean WAV name from the actual downloaded filename (real title)
+      const realBase = path.basename(downloadedFile, path.extname(downloadedFile));
+      const safeBase = sanitizeFilename(realBase);
+      const wavPath = path.join(jobDir, `${safeBase}.wav`);
+
+      // Convert to WAV
       emit({ type: 'track_progress', index, percent: 0, stage: 'converting' });
 
       const ffmpegArgs = [
@@ -347,35 +428,32 @@ function downloadAndConvert(url, safeTitle, jobDir, jobId, index, total, emit) {
       ffProc.stderr.on('data', d => {
         const text = d.toString();
         ffStderr += text;
-        // Parse ffmpeg time progress (Duration vs time=)
         const totalMatch = ffStderr.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
         const timeMatch = text.match(/time=\s*(\d+):(\d+):([\d.]+)/);
         if (totalMatch && timeMatch) {
           const toSec = (h, m, s) => +h * 3600 + +m * 60 + parseFloat(s);
-          const total = toSec(totalMatch[1], totalMatch[2], totalMatch[3]);
+          const tot = toSec(totalMatch[1], totalMatch[2], totalMatch[3]);
           const current = toSec(timeMatch[1], timeMatch[2], timeMatch[3]);
-          const pct = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+          const pct = tot > 0 ? Math.min(100, (current / tot) * 100) : 0;
           emit({ type: 'track_progress', index, percent: pct, stage: 'converting' });
         }
       });
 
       ffProc.on('error', (err) => {
-        try { fs.unlinkSync(downloadedFile); } catch {}
+        try { fs.rmSync(trackDir, { recursive: true, force: true }); } catch {}
         reject(new Error(`ffmpeg not found. Please install ffmpeg. (${err.message})`));
       });
 
       ffProc.on('close', (ffCode) => {
-        // Clean up the raw download file
-        try { fs.unlinkSync(downloadedFile); } catch {}
+        // Clean up the isolated track subdirectory
+        try { fs.rmSync(trackDir, { recursive: true, force: true }); } catch {}
 
         if (ffCode !== 0) {
           return reject(new Error(`ffmpeg conversion failed (exit ${ffCode}). ${ffStderr.slice(-200)}`));
         }
-
         if (!fs.existsSync(wavPath)) {
-          return reject(new Error(`WAV file was not created for "${safeTitle}".`));
+          return reject(new Error(`WAV file was not created for "${hintTitle}".`));
         }
-
         emit({ type: 'track_progress', index, percent: 100, stage: 'converting' });
         resolve(wavPath);
       });
