@@ -514,6 +514,65 @@
       }
     }
 
+    /* ── Donate button ────────────────────────────────────── */
+    .donate-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: rgba(251, 113, 133, 0.08);
+      border: 1px solid rgba(251, 113, 133, 0.22);
+      border-radius: 99px;
+      color: #fda4af;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background var(--trans), border-color var(--trans), transform 0.15s, box-shadow var(--trans);
+    }
+
+    .donate-btn:hover {
+      background: rgba(251, 113, 133, 0.15);
+      border-color: rgba(251, 113, 133, 0.42);
+      box-shadow: 0 0 18px rgba(251, 113, 133, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .donate-btn:active {
+      transform: scale(0.97);
+    }
+
+    .donate-heart {
+      font-size: 13px;
+      animation: heartbeat 2.2s ease-in-out infinite;
+    }
+
+    @keyframes heartbeat {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      14% {
+        transform: scale(1.25);
+      }
+
+      28% {
+        transform: scale(1);
+      }
+
+      42% {
+        transform: scale(1.15);
+      }
+
+      56% {
+        transform: scale(1);
+      }
+    }
+
     /* ── Footer ───────────────────────────────────────────── */
     .footer {
       text-align: center;
@@ -599,7 +658,11 @@
 
       <!-- Footer -->
       <footer class="footer">
-        Powered by Trankilo &nbsp;·&nbsp; Audio exported as 44.1 kHz 16-bit PCM WAV
+        <a class="donate-btn" href="https://paypal.me/enzocharlot" target="_blank" rel="noopener" id="donate-link">
+          <span class="donate-heart">♥</span>
+          Support this project
+        </a>
+        <p style="margin-top:10px;">Powered by Trankilo &nbsp;·&nbsp; Audio exported as 44.1 kHz 16-bit PCM WAV</p>
       </footer>
 
     </div>
